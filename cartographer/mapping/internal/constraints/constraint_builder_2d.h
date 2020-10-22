@@ -58,6 +58,14 @@ transform::Rigid2d ComputeSubmapPose(const Submap2D& submap);
 //
 // This class is thread-safe.
 class ConstraintBuilder2D {
+
+  //move to top to pass compile
+  struct SubmapScanMatcher {
+    const Grid2D* grid = nullptr;
+    std::unique_ptr<scan_matching::FastCorrelativeScanMatcher2D>
+        fast_correlative_scan_matcher;
+    std::weak_ptr<common::Task> creation_task_handle;
+  };
  public:
   using Constraint = PoseGraphInterface::Constraint;
   using Result = std::vector<Constraint>;
@@ -106,13 +114,21 @@ class ConstraintBuilder2D {
 
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 
+
+
+
+  const SubmapScanMatcher* NonThreadDispatchScanMatcherConstruction
+    (const SubmapId& submap_id,const Grid2D* const grid);
+
+  double NonThreadComputeConstraint(
+    const SubmapId& submap_id, const Submap2D* const submap,
+    const TrajectoryNode::Data* const constant_data,
+    const SubmapScanMatcher& submap_scan_matcher,
+    transform::Rigid2d& pose_estimate);
+
+
  private:
-  struct SubmapScanMatcher {
-    const Grid2D* grid = nullptr;
-    std::unique_ptr<scan_matching::FastCorrelativeScanMatcher2D>
-        fast_correlative_scan_matcher;
-    std::weak_ptr<common::Task> creation_task_handle;
-  };
+
 
   // The returned 'grid' and 'fast_correlative_scan_matcher' must only be
   // accessed after 'creation_task_handle' has completed.

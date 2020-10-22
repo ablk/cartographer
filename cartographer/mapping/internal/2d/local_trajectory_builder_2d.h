@@ -34,6 +34,7 @@
 #include "cartographer/sensor/odometry_data.h"
 #include "cartographer/sensor/range_data.h"
 #include "cartographer/transform/rigid_transform.h"
+#include "cartographer/mapping/pose_graph_interface.h"
 
 namespace cartographer {
 namespace mapping {
@@ -76,7 +77,36 @@ class LocalTrajectoryBuilder2D {
 
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 
+
+  std::unique_ptr<MatchingResult> AddAccumulatedRangeDataLocalization(
+      common::Time time,
+      const sensor::RangeData& gravity_aligned_range_data,
+      const transform::Rigid3d& gravity_alignment,
+      const absl::optional<common::Duration>& sensor_duration,
+      const transform::Rigid3d& range_data_pose);
+
+  std::unique_ptr<MatchingResult> MatchWithOldSubmap(
+    std::shared_ptr<const TrajectoryNode::Data> node_data,
+    const PoseGraphInterface::SubmapData& nearest_submap);
+
+  bool SetPureLocalization(const bool pure_localization){
+    pure_localization_=pure_localization;
+  }
+
+  //Reset to new trajectory origin
+  void ResetExtrapolator(const common::Time time,const transform::Rigid3d& origin);
+
  private:
+  std::unique_ptr<MatchingResult> AddAccumulatedRangeDataAndFilterMoving(
+      common::Time time,
+      const sensor::RangeData& gravity_aligned_range_data,
+      const transform::Rigid3d& gravity_alignment,
+      const absl::optional<common::Duration>& sensor_duration);
+  std::unique_ptr<transform::Rigid2d> ScanMatchAndFilterMoving(
+    common::Time time, const transform::Rigid2d& pose_prediction,
+    const sensor::PointCloud& filtered_gravity_aligned_point_cloud,
+    sensor::PointCloud &moving_filtered_point_cloud);
+
   std::unique_ptr<MatchingResult> AddAccumulatedRangeData(
       common::Time time, const sensor::RangeData& gravity_aligned_range_data,
       const transform::Rigid3d& gravity_alignment,
@@ -117,6 +147,11 @@ class LocalTrajectoryBuilder2D {
   absl::optional<common::Time> last_sensor_time_;
 
   RangeDataCollator range_data_collator_;
+
+  bool pure_localization_;
+  bool is_global_localized_=false;
+
+
 };
 
 }  // namespace mapping

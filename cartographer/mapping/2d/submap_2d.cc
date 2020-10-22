@@ -235,5 +235,12 @@ void ActiveSubmaps2D::AddSubmap(const Eigen::Vector2f& origin) {
       &conversion_tables_));
 }
 
+void ActiveSubmaps2D::clear(){
+  for(auto & submap : submaps_){
+    submap.reset();
+  }
+  submaps_.clear();
+}
+
 }  // namespace mapping
 }  // namespace cartographer

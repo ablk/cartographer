@@ -71,6 +71,22 @@ class Grid2D : public GridInterface {
                kUnknownCorrespondenceValue;
   }
 
+  // Return true if unknown neighbor ratio is larger than sparse_threshold
+  bool IsUnKnownOrSparse(const Eigen::Array2i& cell_index,const double sparse_threshold) const{
+    if(!IsKnown(cell_index))return true;
+    
+    double count =0;
+    if(!IsKnown(cell_index+Eigen::Array2i(1,0)))count++;
+    if(!IsKnown(cell_index+Eigen::Array2i(1,-1)))count++;
+    if(!IsKnown(cell_index+Eigen::Array2i(1,1)))count++;
+    if(!IsKnown(cell_index+Eigen::Array2i(-1,0)))count++;
+    if(!IsKnown(cell_index+Eigen::Array2i(-1,-1)))count++;
+    if(!IsKnown(cell_index+Eigen::Array2i(-1,1)))count++;
+    if(!IsKnown(cell_index+Eigen::Array2i(0,1)))count++;
+    if(!IsKnown(cell_index+Eigen::Array2i(0,-1)))count++;
+    return count/8.0>sparse_threshold;
+  }
+
   // Fills in 'offset' and 'limits' to define a subregion of that contains all
   // known cells.
   void ComputeCroppedLimits(Eigen::Array2i* const offset,

@@ -35,6 +35,7 @@
 #include "cartographer/sensor/range_data.h"
 #include "cartographer/sensor/timed_point_cloud_data.h"
 #include "cartographer/transform/rigid_transform.h"
+#include "cartographer/mapping/pose_graph_interface.h"
 
 namespace cartographer {
 namespace mapping {
@@ -74,6 +75,12 @@ class LocalTrajectoryBuilder3D {
   void AddOdometryData(const sensor::OdometryData& odometry_data);
 
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
+
+//unused functions
+  std::unique_ptr<MatchingResult> MatchWithOldSubmap(
+    std::shared_ptr<const TrajectoryNode::Data> node_data,
+    const PoseGraphInterface::SubmapData& nearest_submap){return nullptr;}
+  void ResetExtrapolator(const common::Time time,const transform::Rigid3d& origin){}
 
  private:
   std::unique_ptr<MatchingResult> AddAccumulatedRangeData(

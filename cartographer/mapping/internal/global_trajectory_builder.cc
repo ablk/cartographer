@@ -63,6 +63,73 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
     }
     kLocalSlamMatchingResults->Increment();
     std::unique_ptr<InsertionResult> insertion_result;
+
+    
+    if(GetPureLocalization()){
+      
+      if(std::chrono::duration_cast<std::chrono::seconds>(matching_result->insertion_result->constant_data->time - last_relocalization_time_).count()<=5.0
+        && !(last_relocalization_time_ == common::Time::min()) && !is_global_localized_){
+        return;
+        //skip 5 sec after relocalization fail
+      }
+      
+      
+      if (matching_result->insertion_result != nullptr) {
+        const transform::Rigid3d gravity_alignment_mat = transform::Rigid3d::Rotation(matching_result->insertion_result->constant_data->gravity_alignment);
+        if(!is_global_localized_){
+          LOG(WARNING)<<"Relocalization";
+          is_global_localized_ = pose_graph_->SearchAllConstraints(
+              matching_result->insertion_result->constant_data,
+              trajectory_id_,
+              global_pose_
+            );
+
+          last_relocalization_time_ = matching_result->time;
+
+          if(!is_global_localized_){
+            LOG(WARNING)<<"Relocalization Failed";
+            return;
+          }
+          LOG(INFO)<<"Relocalization Sucess";
+
+          //transform::Rigid3d global_pose_non_aligned = global_pose_*gravity_alignment_mat;
+          local_trajectory_builder_->ResetExtrapolator(matching_result->time,global_pose_*gravity_alignment_mat);
+          //return;
+        }
+        //LOG(INFO)<<"GP:"<<global_pose_;
+
+        const PoseGraphInterface::SubmapData nearest_submap = 
+          pose_graph_ -> SearchNearestSubmap(global_pose_,trajectory_id_);
+        //LOG(INFO)<<"SearchNearestSubmap";
+
+        std::unique_ptr<typename LocalTrajectoryBuilder::MatchingResult>
+          global_matching_result =
+          local_trajectory_builder_ -> MatchWithOldSubmap(matching_result->insertion_result->constant_data,nearest_submap);
+
+
+        if(global_matching_result == nullptr){
+          LOG(WARNING)<<"fail global localization";
+          //TODO::
+          //handle case if is_global_localized_ then track lost again
+          is_global_localized_ = false;
+        }
+        else{
+          global_pose_ = global_matching_result->local_pose*gravity_alignment_mat.inverse();
+          if (local_slam_result_callback_) {
+            local_slam_result_callback_(
+                trajectory_id_, global_matching_result->time, global_matching_result->local_pose,
+                std::move(global_matching_result->range_data_in_local),
+                nullptr);
+
+          }
+        }
+
+      }
+
+      return;
+
+    }
+
     if (matching_result->insertion_result != nullptr) {
       kLocalSlamInsertionResults->Increment();
       auto node_id = pose_graph_->AddNode(
@@ -127,6 +194,11 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
   PoseGraph* const pose_graph_;
   std::unique_ptr<LocalTrajectoryBuilder> local_trajectory_builder_;
   LocalSlamResultCallback local_slam_result_callback_;
+
+  bool is_global_localized_ = false;
+  transform::Rigid3d global_pose_;
+  common::Time last_relocalization_time_ = common::Time::min();
+
 };
 
 }  // namespace

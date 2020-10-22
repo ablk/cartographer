@@ -33,7 +33,7 @@ message TrajectoryBuilderOptions {
 
   reserved 5;
 
-  bool pure_localization = 3 [deprecated = true];
+  bool pure_localization = 3;// [deprecated = true];
   message PureLocalizationTrimmerOptions {
     int32 max_submaps_to_keep = 1;
   }

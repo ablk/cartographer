@@ -52,6 +52,17 @@ class CeresScanMatcher2D {
              transform::Rigid2d* pose_estimate,
              ceres::Solver::Summary* summary) const;
 
+
+  void MatchAndFilterMoving(const Eigen::Vector2d& target_translation,
+         const transform::Rigid2d& initial_pose_estimate,
+         const sensor::PointCloud& point_cloud,
+         const Grid2D& grid,
+         const double moving_threshold,
+         transform::Rigid2d* const pose_estimate,
+         ceres::Solver::Summary* const summary,
+         sensor::PointCloud &moving_filtered_point_cloud) const;
+
+
  private:
   const proto::CeresScanMatcherOptions2D options_;
   ceres::Solver::Options ceres_solver_options_;

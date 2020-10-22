@@ -53,6 +53,9 @@ proto::TrajectoryBuilderOptions CreateTrajectoryBuilderOptions(
   options.set_collate_landmarks(
       parameter_dictionary->GetBool("collate_landmarks"));
   PopulatePureLocalizationTrimmerOptions(&options, parameter_dictionary);
+  
+  options.set_pure_localization(
+    parameter_dictionary->GetBool("pure_localization"));
   return options;
 }
 

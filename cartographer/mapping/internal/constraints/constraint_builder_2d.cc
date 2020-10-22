@@ -342,6 +342,69 @@ void ConstraintBuilder2D::RegisterMetrics(metrics::FamilyFactory* factory) {
   kNumSubmapScanMatchersMetric = num_matchers->Add({});
 }
 
+
+const ConstraintBuilder2D::SubmapScanMatcher*
+ConstraintBuilder2D::NonThreadDispatchScanMatcherConstruction(const SubmapId& submap_id,
+                                                     const Grid2D* const grid) {
+  CHECK(grid);
+  if (submap_scan_matchers_.count(submap_id) != 0) {
+    return &submap_scan_matchers_.at(submap_id);
+  }
+  auto& submap_scan_matcher = submap_scan_matchers_[submap_id];
+  kNumSubmapScanMatchersMetric->Set(submap_scan_matchers_.size());
+  submap_scan_matcher.grid = grid;
+  auto& scan_matcher_options = options_.fast_correlative_scan_matcher_options();
+  submap_scan_matcher.fast_correlative_scan_matcher =
+      absl::make_unique<scan_matching::FastCorrelativeScanMatcher2D>(
+          *submap_scan_matcher.grid, scan_matcher_options);
+
+  return &submap_scan_matchers_.at(submap_id);
+}
+
+double ConstraintBuilder2D::NonThreadComputeConstraint(
+    const SubmapId& submap_id, const Submap2D* const submap,
+    const TrajectoryNode::Data* const constant_data,
+    const SubmapScanMatcher& submap_scan_matcher,
+    transform::Rigid2d& pose_estimate) {
+  CHECK(submap_scan_matcher.fast_correlative_scan_matcher);
+
+  float score = 0.;
+
+  if(!submap_scan_matcher.fast_correlative_scan_matcher->
+    MatchFullSubmap(
+        constant_data->filtered_gravity_aligned_point_cloud,
+        options_.global_localization_min_score(),&score,&pose_estimate))
+  {
+    return 0;
+  }
+
+
+  // Use the CSM estimate as both the initial and previous pose. This has the
+  // effect that, in the absence of better information, we prefer the original
+  // CSM estimate.
+  /*
+  ceres::Solver::Summary unused_summary;
+  ceres_scan_matcher_.Match(pose_estimate.translation(), pose_estimate,
+                            constant_data->filtered_gravity_aligned_point_cloud,
+                            *submap_scan_matcher.grid, &pose_estimate,
+                            &unused_summary);
+  */
+
+
+  if (options_.log_matches()) {
+    std::ostringstream info;
+    info << "Node with "
+         << constant_data->filtered_gravity_aligned_point_cloud.size()
+         << " points on submap " << submap_id << std::fixed;
+    info << " matches";
+    info << " with score " << std::setprecision(1) << 100. * score << "%.";
+    LOG(INFO) << info.str();
+  }
+  return score;
+}
+
+
+
 }  // namespace constraints
 }  // namespace mapping
 }  // namespace cartographer

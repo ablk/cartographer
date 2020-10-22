@@ -157,6 +157,19 @@ class PoseGraph3D : public PoseGraph {
 
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 
+
+
+ //unused functions
+  bool SearchAllConstraints(
+    std::shared_ptr<const TrajectoryNode::Data> node_data,
+    const int trajectory_id,
+    transform::Rigid3d& non_gravity_aligned_global_pose){return false;}
+  SubmapData SearchNearestSubmap(const transform::Rigid3d& global_pose,const int trajectory_id){return SubmapData{};}
+
+
+
+
+
  protected:
   // Waits until we caught up (i.e. nothing is waiting to be scheduled), and
   // all computations have finished.

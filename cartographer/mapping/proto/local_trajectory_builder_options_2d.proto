@@ -74,4 +74,15 @@ message LocalTrajectoryBuilderOptions2D {
 
   // True if IMU data should be expected and used.
   bool use_imu_data = 12;
+
+
+
+  //enable filter moving
+  bool filter_moving = 22;
+  //Grid is sparse, if unknown neighbor's ratio is more then threshold 
+  float sparse_threshold = 23;
+  //point cloud is moving if residual > threshold
+  float moving_threshold = 24;
+
+  float dilate_radius = 25;
 }

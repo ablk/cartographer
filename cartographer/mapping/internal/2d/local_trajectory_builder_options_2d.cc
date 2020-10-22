@@ -41,6 +41,16 @@ proto::LocalTrajectoryBuilderOptions2D CreateLocalTrajectoryBuilderOptions2D(
       parameter_dictionary->GetDouble("voxel_filter_size"));
   options.set_use_online_correlative_scan_matching(
       parameter_dictionary->GetBool("use_online_correlative_scan_matching"));
+  
+  options.set_sparse_threshold(
+      parameter_dictionary->GetDouble("sparse_threshold"));
+  options.set_moving_threshold(
+      parameter_dictionary->GetDouble("moving_threshold"));
+  options.set_dilate_radius(
+      parameter_dictionary->GetDouble("dilate_radius"));
+  options.set_filter_moving(
+      parameter_dictionary->GetBool("filter_moving"));
+
   *options.mutable_adaptive_voxel_filter_options() =
       sensor::CreateAdaptiveVoxelFilterOptions(
           parameter_dictionary->GetDictionary("adaptive_voxel_filter").get());

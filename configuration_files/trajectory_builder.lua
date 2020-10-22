@@ -23,4 +23,8 @@ TRAJECTORY_BUILDER = {
 --  },
   collate_fixed_frame = true,
   collate_landmarks = false,
+
+
+--Additional parameters
+  pure_localization = false,
 }

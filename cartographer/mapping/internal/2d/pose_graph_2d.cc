@@ -1333,5 +1333,102 @@ void PoseGraph2D::RegisterMetrics(metrics::FamilyFactory* family_factory) {
   kDeletedSubmapsMetric = submaps->Add({{"state", "deleted"}});
 }
 
+bool PoseGraph2D::SearchAllConstraints(
+    std::shared_ptr<const TrajectoryNode::Data> node_data,
+    const int trajectory_id,
+    transform::Rigid3d& non_gravity_aligned_global_pose){
+      
+  std::vector<SubmapId> finished_submap_ids;
+  {
+    absl::MutexLock locker(&mutex_);
+    for (const auto& submap_id_data : data_.submap_data) {
+
+      if (submap_id_data.data.state == SubmapState::kFinished
+        && submap_id_data.id.trajectory_id != trajectory_id ) {
+        finished_submap_ids.emplace_back(submap_id_data.id);
+      }
+    }
+  }
+
+  std::vector<Eigen::Vector2d> translations;
+  std::vector<double> angles;
+  std::vector<double> scores;
+  double sum_score = 0 ;
+  
+  for (const auto& submap_id : finished_submap_ids) {
+    const TrajectoryNode::Data* constant_data = node_data.get();
+    PoseGraphInterface::SubmapData submap_data;
+    const Submap2D* submap;
+    {
+      absl::MutexLock locker(&mutex_);
+      submap_data = GetSubmapDataUnderLock(submap_id);
+      submap = static_cast<const Submap2D*>(submap_data.submap.get());
+    }
+        
+
+    const auto* scan_matcher =
+      constraint_builder_.NonThreadDispatchScanMatcherConstruction(submap_id, submap->grid());
+        
+    transform::Rigid2d pose_estimate = transform::Rigid2d::Identity();
+      double score = constraint_builder_.NonThreadComputeConstraint(
+            submap_id, submap,
+            constant_data,
+            *scan_matcher,
+            pose_estimate);
+      
+    pose_estimate = transform::Project2D(submap_data.pose*(submap->local_pose()).inverse())*pose_estimate;
+    
+    if(score>0){
+      scores.push_back(score);
+      translations.push_back(pose_estimate.translation());
+      angles.push_back(pose_estimate.normalized_angle());
+      sum_score+=score;
+    }
+
+  }
+  if(sum_score==0) return false;
+  
+  Eigen::Vector2d avg_translation(0,0);
+  double avg_angle=0;
+
+  
+  for(size_t i=0;i<scores.size();i++){
+    double weight = scores[i]/sum_score;
+    avg_translation=avg_translation+weight*translations[i];
+    avg_angle=avg_angle+weight*angles[i];
+  }
+  
+  
+  non_gravity_aligned_global_pose = transform::Embed3D(transform::Rigid2d(avg_translation, avg_angle));
+  return true;
+}
+
+PoseGraphInterface::SubmapData
+PoseGraph2D::SearchNearestSubmap(const transform::Rigid3d& global_pose,const int trajectory_id)
+{
+  SubmapId near_submap_id{-1,-1};
+  double near_distance=-1;
+
+  absl::MutexLock locker(&mutex_);
+  for (const auto& submap_id_data : data_.submap_data) {
+
+    if (submap_id_data.id.trajectory_id == trajectory_id){
+      continue;
+    }
+
+    auto submap_data = GetSubmapDataUnderLock(submap_id_data.id);
+    double distance = (submap_data.pose.inverse()*global_pose).translation().norm();
+    if(near_distance==-1 || near_distance>distance){
+        near_distance = distance;
+        near_submap_id = submap_id_data.id;
+    }
+    
+  }
+
+  return GetSubmapDataUnderLock(near_submap_id);
+
+}
+
+
 }  // namespace mapping
 }  // namespace cartographer

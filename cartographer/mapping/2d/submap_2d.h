@@ -89,6 +89,8 @@ class ActiveSubmaps2D {
 
   std::vector<std::shared_ptr<const Submap2D>> submaps() const;
 
+  void clear();
+
  private:
   std::unique_ptr<RangeDataInserterInterface> CreateRangeDataInserter();
   std::unique_ptr<GridInterface> CreateGrid(const Eigen::Vector2f& origin);

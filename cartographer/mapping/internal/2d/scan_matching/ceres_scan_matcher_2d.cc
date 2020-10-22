@@ -106,6 +106,92 @@ void CeresScanMatcher2D::Match(const Eigen::Vector2d& target_translation,
       {ceres_pose_estimate[0], ceres_pose_estimate[1]}, ceres_pose_estimate[2]);
 }
 
+
+void CeresScanMatcher2D::MatchAndFilterMoving(const Eigen::Vector2d& target_translation,
+                               const transform::Rigid2d& initial_pose_estimate,
+                               const sensor::PointCloud& point_cloud,
+                               const Grid2D& grid,
+                               const double moving_threshold,
+                               transform::Rigid2d* const pose_estimate,
+                               ceres::Solver::Summary* const summary,
+                               sensor::PointCloud &moving_filtered_point_cloud) const {
+  double ceres_pose_estimate[3] = {initial_pose_estimate.translation().x(),
+                                   initial_pose_estimate.translation().y(),
+                                   initial_pose_estimate.rotation().angle()};
+  ceres::Problem problem;
+  CHECK_GT(options_.occupied_space_weight(), 0.);
+
+  ceres::ResidualBlockId occupied_space_cost_function_2d_id;
+  const float occupied_space_gain = 
+                  options_.occupied_space_weight() /
+                  std::sqrt(static_cast<double>(point_cloud.size()));
+
+  switch (grid.GetGridType()) {
+    case GridType::PROBABILITY_GRID:
+      occupied_space_cost_function_2d_id =
+      problem.AddResidualBlock(
+          CreateOccupiedSpaceCostFunction2D(
+              options_.occupied_space_weight() /
+                  std::sqrt(static_cast<double>(point_cloud.size())),
+              point_cloud, grid),
+          nullptr /* loss function */, ceres_pose_estimate);
+      break;
+    case GridType::TSDF:
+      problem.AddResidualBlock(
+          CreateTSDFMatchCostFunction2D(
+              options_.occupied_space_weight() /
+                  std::sqrt(static_cast<double>(point_cloud.size())),
+              point_cloud, static_cast<const TSDF2D&>(grid)),
+          nullptr /* loss function */, ceres_pose_estimate);
+      break;
+  }
+  CHECK_GT(options_.translation_weight(), 0.);
+  problem.AddResidualBlock(
+      TranslationDeltaCostFunctor2D::CreateAutoDiffCostFunction(
+          options_.translation_weight(), target_translation),
+      nullptr /* loss function */, ceres_pose_estimate);
+  CHECK_GT(options_.rotation_weight(), 0.);
+  problem.AddResidualBlock(
+      RotationDeltaCostFunctor2D::CreateAutoDiffCostFunction(
+          options_.rotation_weight(), ceres_pose_estimate[2]),
+      nullptr /* loss function */, ceres_pose_estimate);
+
+  ceres::Solve(ceres_solver_options_, &problem, summary);
+
+  if(grid.GetGridType()==GridType::PROBABILITY_GRID){
+    // TODO::currently not test in tsdf mode
+
+    std::vector<ceres::ResidualBlockId> cost_function_ids;
+    cost_function_ids.push_back(occupied_space_cost_function_2d_id);
+    ceres::Problem::EvaluateOptions evaluate_options;
+    evaluate_options.apply_loss_function = false;
+    evaluate_options.residual_blocks = cost_function_ids;
+
+    std::vector<double> occupied_space_residual;
+    problem.Evaluate(evaluate_options, nullptr, &occupied_space_residual, nullptr, nullptr);
+
+
+    for(size_t i=0;i<point_cloud.size();i++){
+      if(occupied_space_residual[i]/occupied_space_gain < (moving_threshold + 0.1)){
+        moving_filtered_point_cloud.push_back(point_cloud[i]);
+      }
+    }
+
+    problem.RemoveResidualBlock(occupied_space_cost_function_2d_id);
+    problem.AddResidualBlock(
+        CreateOccupiedSpaceCostFunction2D(
+            options_.occupied_space_weight() /
+                std::sqrt(static_cast<double>(moving_filtered_point_cloud.size())),
+            moving_filtered_point_cloud, grid),
+        nullptr /* loss function */, ceres_pose_estimate);
+
+    ceres::Solve(ceres_solver_options_, &problem, summary);
+  }
+
+  *pose_estimate = transform::Rigid2d(
+      {ceres_pose_estimate[0], ceres_pose_estimate[1]}, ceres_pose_estimate[2]);
+}
+
 }  // namespace scan_matching
 }  // namespace mapping
 }  // namespace cartographer

@@ -141,6 +141,7 @@ int MapBuilder::AddTrajectoryBuilder(
       local_trajectory_builder = absl::make_unique<LocalTrajectoryBuilder2D>(
           trajectory_options.trajectory_builder_2d_options(),
           SelectRangeSensorIds(expected_sensor_ids));
+      local_trajectory_builder->SetPureLocalization(trajectory_options.pure_localization());
     }
     DCHECK(dynamic_cast<PoseGraph2D*>(pose_graph_.get()));
     trajectory_builders_.push_back(absl::make_unique<CollatedTrajectoryBuilder>(
@@ -150,6 +151,7 @@ int MapBuilder::AddTrajectoryBuilder(
             std::move(local_trajectory_builder), trajectory_id,
             static_cast<PoseGraph2D*>(pose_graph_.get()),
             local_slam_result_callback)));
+    (trajectory_builders_.back())->SetPureLocalization(trajectory_options.pure_localization());
   }
   MaybeAddPureLocalizationTrimmer(trajectory_id, trajectory_options,
                                   pose_graph_.get());

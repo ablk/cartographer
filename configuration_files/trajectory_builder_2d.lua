@@ -112,4 +112,10 @@ TRAJECTORY_BUILDER_2D = {
       },
     },
   },
+
+  --Additional parameters
+  sparse_threshold = 0.3,
+  moving_threshold = 0.4,
+  filter_moving = false,
+  dilate_radius = 0,
 }

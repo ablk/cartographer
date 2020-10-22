@@ -159,6 +159,12 @@ class PoseGraph2D : public PoseGraph {
 
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 
+  bool SearchAllConstraints(
+    std::shared_ptr<const TrajectoryNode::Data> node_data,
+    const int trajectory_id,
+    transform::Rigid3d& non_gravity_aligned_global_pose)override LOCKS_EXCLUDED(mutex_);
+  SubmapData SearchNearestSubmap(const transform::Rigid3d& global_pose,const int trajectory_id)override LOCKS_EXCLUDED(mutex_);
+
  private:
   MapById<SubmapId, PoseGraphInterface::SubmapData> GetSubmapDataUnderLock()
       const EXCLUSIVE_LOCKS_REQUIRED(mutex_);
