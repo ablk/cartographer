@@ -374,23 +374,6 @@ void LocalTrajectoryBuilder2D::InitializeExtrapolator(const common::Time time) {
   extrapolator_->AddPose(time, transform::Rigid3d::Identity());
 }
 
-void LocalTrajectoryBuilder2D::ResetExtrapolator(const common::Time time,const transform::Rigid3d& origin) {
-
-  extrapolator_.reset(new PoseExtrapolator(
-      ::cartographer::common::FromSeconds(options_.pose_extrapolator_options()
-                                              .constant_velocity()
-                                              .pose_queue_duration()),
-      options_.pose_extrapolator_options()
-          .constant_velocity()
-          .imu_gravity_time_constant()));
-  extrapolator_->AddPose(time, origin);
-
-  is_global_localized_ = true;
-  active_submaps_.clear();
-}
-
-
-
 void LocalTrajectoryBuilder2D::RegisterMetrics(
     metrics::FamilyFactory* family_factory) {
   auto* latency = family_factory->NewGaugeFamily(
@@ -625,36 +608,23 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeDataLocalization(
   }
 
 
-  if(!options_.filter_moving()|| is_global_localized_){
-
-    std::unique_ptr<InsertionResult> insertion_result = 
-      absl::make_unique<InsertionResult>(InsertionResult{
-        std::make_shared<const TrajectoryNode::Data>(TrajectoryNode::Data{
-            time,
-            gravity_alignment.rotation(),
-            filtered_gravity_aligned_point_cloud,
-            {},  // 'high_resolution_point_cloud' is only used in 3D.
-            {},  // 'low_resolution_point_cloud' is only used in 3D.
-            {},  // 'rotational_scan_matcher_histogram' is only used in 3D.
-            range_data_pose}),
-            {}});
-    return absl::make_unique<MatchingResult>(
-      MatchingResult{time, transform::Rigid3d::Identity(), std::move(gravity_aligned_range_data),
-                     std::move(insertion_result)});
-  };
-
   // Computes a gravity aligned pose prediction.
-  const transform::Rigid3d non_gravity_aligned_pose_prediction =
-      extrapolator_->ExtrapolatePose(time);
-  const transform::Rigid2d pose_prediction = transform::Project2D(
-      non_gravity_aligned_pose_prediction * gravity_alignment.inverse());
+  const transform::Rigid2d pose_prediction = transform::Project2D(range_data_pose * gravity_alignment.inverse());
 
 
   sensor::PointCloud moving_filtered_point_cloud;
   // local map frame <- gravity-aligned frame
-  std::unique_ptr<transform::Rigid2d> pose_estimate_2d =
-      ScanMatchAndFilterMoving(time, pose_prediction, filtered_gravity_aligned_point_cloud,moving_filtered_point_cloud);
+  std::unique_ptr<transform::Rigid2d> pose_estimate_2d;
   
+  if(!options_.filter_moving()){
+    moving_filtered_point_cloud = filtered_gravity_aligned_point_cloud;
+    pose_estimate_2d = ScanMatch(time, pose_prediction, filtered_gravity_aligned_point_cloud);
+  }
+  else{
+    pose_estimate_2d = ScanMatchAndFilterMoving(time, pose_prediction, filtered_gravity_aligned_point_cloud,moving_filtered_point_cloud);
+  }
+
+
   if (pose_estimate_2d == nullptr) {
     LOG(WARNING) << "Scan matching failed.";
     return nullptr;
@@ -669,11 +639,13 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeDataLocalization(
       TransformRangeData(gravity_aligned_range_data,
                          transform::Embed3D(pose_estimate_2d->cast<float>()));
 
+  std::vector<std::shared_ptr<const Submap2D>> insertion_submaps;
+
   if(!motion_filter_.IsSimilar(time, pose_estimate)){
-    active_submaps_.InsertRangeData(range_data_in_local);
+    insertion_submaps = active_submaps_.InsertRangeData(range_data_in_local);
   }
 
-  if(moving_filtered_point_cloud.empty()){
+  if(moving_filtered_point_cloud.empty()||active_submaps_.submaps().front() == active_submaps_.submaps().back()){
     return nullptr;
     //first filtered range could be empty
   }
@@ -683,14 +655,14 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeDataLocalization(
       std::make_shared<const TrajectoryNode::Data>(TrajectoryNode::Data{
           time,
           gravity_alignment.rotation(),
-          moving_filtered_point_cloud,
+          moving_filtered_point_cloud,   //used for pose graph compute constraint
           {},  // 'high_resolution_point_cloud' is only used in 3D.
           {},  // 'low_resolution_point_cloud' is only used in 3D.
           {},  // 'rotational_scan_matcher_histogram' is only used in 3D.
-          range_data_pose}),
-          {}});
+          pose_estimate*gravity_alignment.inverse()}),//used for compute trajectory origin
+          std::move(insertion_submaps)});
   return absl::make_unique<MatchingResult>(
-    MatchingResult{time, transform::Rigid3d::Identity(), std::move(gravity_aligned_range_data),
+    MatchingResult{time, pose_estimate, std::move(gravity_aligned_range_data),//for visualization
                    std::move(insertion_result)});
 
 }
@@ -699,7 +671,8 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeDataLocalization(
 std::unique_ptr<LocalTrajectoryBuilder2D::MatchingResult> 
 LocalTrajectoryBuilder2D::MatchWithOldSubmap(
   std::shared_ptr<const TrajectoryNode::Data> node_data,
-  const PoseGraphInterface::SubmapData& nearest_submap) {
+  const PoseGraphInterface::SubmapData& nearest_submap,
+  const sensor::RangeData& gravity_aligned_range_data) {
 
 
 
@@ -707,7 +680,7 @@ LocalTrajectoryBuilder2D::MatchWithOldSubmap(
   const TrajectoryNode::Data* constant_data = node_data.get();
   
   const transform::Rigid3d non_gravity_aligned_pose_prediction =
-      extrapolator_->ExtrapolatePose(constant_data->time);
+      trajectory_origin_ * extrapolator_->ExtrapolatePose(constant_data->time);
     // robot pose on global frame = 
     //         extrapolator_origin * ExtrapolatePose
     
@@ -744,16 +717,14 @@ LocalTrajectoryBuilder2D::MatchWithOldSubmap(
   const transform::Rigid3d pose_observation_3d = 
     submap_global_to_local*transform::Embed3D(*pose_observation_2d)*gravity_alignment_mat;
   
-  extrapolator_->AddPose(constant_data->time, pose_observation_3d);
+  extrapolator_->AddPose(constant_data->time, trajectory_origin_.inverse() * pose_observation_3d);
 
   sensor::RangeData range_data_in_global;
 
   //point cloud for visualization
-  range_data_in_global.origin = Eigen::Vector3f::Zero();
-  range_data_in_global.returns = constant_data->filtered_gravity_aligned_point_cloud;
-  range_data_in_global = TransformRangeData(range_data_in_global,(submap_global_to_local*transform::Embed3D(*pose_observation_2d)).cast<float>());
+  range_data_in_global = TransformRangeData(gravity_aligned_range_data,(submap_global_to_local*transform::Embed3D(*pose_observation_2d)).cast<float>());
 
-    return absl::make_unique<MatchingResult>(
+  return absl::make_unique<MatchingResult>(
         MatchingResult{constant_data->time, pose_observation_3d, 
           std::move(range_data_in_global),
           nullptr

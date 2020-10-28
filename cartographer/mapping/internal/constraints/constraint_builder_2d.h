@@ -115,13 +115,13 @@ class ConstraintBuilder2D {
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 
 
+  std::shared_ptr<ConstraintBuilder2D::SubmapScanMatcher>
+  DispatchScanMatcherConstruction(const Grid2D* const grid);
 
-
-  const SubmapScanMatcher* NonThreadDispatchScanMatcherConstruction
+  const SubmapScanMatcher* NoLockDispatchScanMatcherConstruction
     (const SubmapId& submap_id,const Grid2D* const grid);
 
-  double NonThreadComputeConstraint(
-    const SubmapId& submap_id, const Submap2D* const submap,
+  double ComputeConstraint(
     const TrajectoryNode::Data* const constant_data,
     const SubmapScanMatcher& submap_scan_matcher,
     transform::Rigid2d& pose_estimate);

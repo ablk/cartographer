@@ -1335,26 +1335,72 @@ void PoseGraph2D::RegisterMetrics(metrics::FamilyFactory* family_factory) {
 
 bool PoseGraph2D::SearchAllConstraints(
     std::shared_ptr<const TrajectoryNode::Data> node_data,
+    const std::vector<std::shared_ptr<const Submap2D>>& insertion_submaps,
     const int trajectory_id,
-    transform::Rigid3d& non_gravity_aligned_global_pose){
-      
+    transform::Rigid3d& trajectory_origin){
+  //TODO::
+  //Add Thread support
+
+
+  bool newly_finished_submap = false;
+
+
+  if(!insertion_submaps.empty()){
+    if(insertion_submaps.front()->insertion_finished()){
+      newly_finished_submap = true;
+    }
+  }
+
+  if(!newly_finished_submap_sampler){
+    newly_finished_submap_sampler = absl::make_unique<common::FixedRatioSampler>(options_.global_sampling_ratio()*2);
+  }
+
+  if(newly_finished_submap){
+    const Submap2D* submap = insertion_submaps.front().get();
+    
+    const auto scan_matcher =
+        constraint_builder_.DispatchScanMatcherConstruction(submap->grid());
+
+    for (const auto& node_id_data : optimization_problem_->node_data()) {
+      const NodeId& node_id = node_id_data.id;
+      if(node_id.trajectory_id!=trajectory_id){
+        if(newly_finished_submap_sampler->Pulse()){
+          const TrajectoryNode::Data* constant_data = data_.trajectory_nodes.at(node_id).constant_data.get();
+          transform::Rigid2d pose_estimate = transform::Rigid2d::Identity();
+          double score = constraint_builder_.ComputeConstraint(
+              constant_data,
+              *scan_matcher,
+              pose_estimate);
+
+
+          if(score > 0){
+            LOG(INFO)<<" node "<<node_id<<" matches new submap with score = "<<score;
+            trajectory_origin = transform::Embed3D(optimization_problem_->node_data().at(node_id).global_pose_2d * pose_estimate.inverse());
+            return true;
+    
+          }
+        }
+      }
+    }
+
+  }
+
   std::vector<SubmapId> finished_submap_ids;
   {
     absl::MutexLock locker(&mutex_);
     for (const auto& submap_id_data : data_.submap_data) {
 
       if (submap_id_data.data.state == SubmapState::kFinished
-        && submap_id_data.id.trajectory_id != trajectory_id ) {
-        finished_submap_ids.emplace_back(submap_id_data.id);
+        && submap_id_data.id.trajectory_id != trajectory_id ){
+
+        if(global_localization_samplers_[submap_id_data.id.trajectory_id]->Pulse()){
+          finished_submap_ids.emplace_back(submap_id_data.id);
+        }
+      
       }
     }
   }
 
-  std::vector<Eigen::Vector2d> translations;
-  std::vector<double> angles;
-  std::vector<double> scores;
-  double sum_score = 0 ;
-  
   for (const auto& submap_id : finished_submap_ids) {
     const TrajectoryNode::Data* constant_data = node_data.get();
     PoseGraphInterface::SubmapData submap_data;
@@ -1367,40 +1413,32 @@ bool PoseGraph2D::SearchAllConstraints(
         
 
     const auto* scan_matcher =
-      constraint_builder_.NonThreadDispatchScanMatcherConstruction(submap_id, submap->grid());
+      constraint_builder_.NoLockDispatchScanMatcherConstruction(submap_id, submap->grid());
         
     transform::Rigid2d pose_estimate = transform::Rigid2d::Identity();
-      double score = constraint_builder_.NonThreadComputeConstraint(
-            submap_id, submap,
-            constant_data,
-            *scan_matcher,
-            pose_estimate);
       
-    pose_estimate = transform::Project2D(submap_data.pose*(submap->local_pose()).inverse())*pose_estimate;
+    //const auto start_time = std::chrono::steady_clock::now();
+    
+    double score = constraint_builder_.ComputeConstraint(
+          constant_data,
+          *scan_matcher,
+          pose_estimate);
+
+    //const auto duration = std::chrono::steady_clock::now() - start_time;
+    //LOG(INFO)<<"ComputeConstraint Duration:"<<common::ToSeconds(duration);
+    //ComputeConstraint Duration = 0.15 ~ 0.3 sec
+      
+    
     
     if(score>0){
-      scores.push_back(score);
-      translations.push_back(pose_estimate.translation());
-      angles.push_back(pose_estimate.normalized_angle());
-      sum_score+=score;
+      LOG(INFO)<<"New node matches submap "<<submap_id<<" with score = "<<score;
+      pose_estimate = transform::Project2D(submap_data.pose*(submap->local_pose()).inverse())*pose_estimate;
+      trajectory_origin = transform::Embed3D(pose_estimate) * (node_data->local_pose).inverse();
+      return true;
     }
 
   }
-  if(sum_score==0) return false;
-  
-  Eigen::Vector2d avg_translation(0,0);
-  double avg_angle=0;
-
-  
-  for(size_t i=0;i<scores.size();i++){
-    double weight = scores[i]/sum_score;
-    avg_translation=avg_translation+weight*translations[i];
-    avg_angle=avg_angle+weight*angles[i];
-  }
-  
-  
-  non_gravity_aligned_global_pose = transform::Embed3D(transform::Rigid2d(avg_translation, avg_angle));
-  return true;
+  return false;
 }
 
 PoseGraphInterface::SubmapData

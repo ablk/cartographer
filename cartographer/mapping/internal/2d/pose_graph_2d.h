@@ -161,8 +161,9 @@ class PoseGraph2D : public PoseGraph {
 
   bool SearchAllConstraints(
     std::shared_ptr<const TrajectoryNode::Data> node_data,
+    const std::vector<std::shared_ptr<const Submap2D>>& insertion_submaps,
     const int trajectory_id,
-    transform::Rigid3d& non_gravity_aligned_global_pose)override LOCKS_EXCLUDED(mutex_);
+    transform::Rigid3d& trajectory_origin) LOCKS_EXCLUDED(mutex_);
   SubmapData SearchNearestSubmap(const transform::Rigid3d& global_pose,const int trajectory_id)override LOCKS_EXCLUDED(mutex_);
 
  private:
@@ -273,6 +274,9 @@ class PoseGraph2D : public PoseGraph {
   PoseGraphData data_ GUARDED_BY(mutex_);
 
   ValueConversionTables conversion_tables_;
+
+
+  std::unique_ptr<common::FixedRatioSampler> newly_finished_submap_sampler GUARDED_BY(mutex_);
 
   // Allows querying and manipulating the pose graph by the 'trimmers_'. The
   // 'mutex_' of the pose graph is held while this class is used.

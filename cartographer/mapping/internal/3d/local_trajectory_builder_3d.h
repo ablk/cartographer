@@ -79,8 +79,11 @@ class LocalTrajectoryBuilder3D {
 //unused functions
   std::unique_ptr<MatchingResult> MatchWithOldSubmap(
     std::shared_ptr<const TrajectoryNode::Data> node_data,
-    const PoseGraphInterface::SubmapData& nearest_submap){return nullptr;}
-  void ResetExtrapolator(const common::Time time,const transform::Rigid3d& origin){}
+    const PoseGraphInterface::SubmapData& nearest_submap,
+    const sensor::RangeData& gravity_aligned_range_data){return nullptr;}
+  void SetTrajectoryOrigin(const transform::Rigid3d& trajectory_origin){
+   // trajectory_origin_ = trajectory_origin;
+  }
 
  private:
   std::unique_ptr<MatchingResult> AddAccumulatedRangeData(

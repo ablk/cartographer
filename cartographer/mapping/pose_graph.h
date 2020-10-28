@@ -141,10 +141,6 @@ class PoseGraph : public PoseGraphInterface {
                                         const common::Time time) = 0;
 
 
-  virtual bool SearchAllConstraints(
-    std::shared_ptr<const TrajectoryNode::Data> node_data,
-    const int trajectory_id,
-    transform::Rigid3d& non_gravity_aligned_global_pose) = 0;
   virtual SubmapData SearchNearestSubmap(const transform::Rigid3d& global_pose,const int trajectory_id) = 0;
 
 

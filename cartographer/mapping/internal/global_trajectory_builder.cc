@@ -66,45 +66,34 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
 
     
     if(GetPureLocalization()){
-      
-      if(std::chrono::duration_cast<std::chrono::seconds>(matching_result->insertion_result->constant_data->time - last_relocalization_time_).count()<=5.0
-        && !(last_relocalization_time_ == common::Time::min()) && !is_global_localized_){
-        return;
-        //skip 5 sec after relocalization fail
-      }
-      
-      
+  
       if (matching_result->insertion_result != nullptr) {
         const transform::Rigid3d gravity_alignment_mat = transform::Rigid3d::Rotation(matching_result->insertion_result->constant_data->gravity_alignment);
         if(!is_global_localized_){
-          LOG(WARNING)<<"Relocalization";
+          //LOG(WARNING)<<"Relocalization";
+          transform::Rigid3d trajectory_origin;    
           is_global_localized_ = pose_graph_->SearchAllConstraints(
               matching_result->insertion_result->constant_data,
+              matching_result->insertion_result->insertion_submaps,
               trajectory_id_,
-              global_pose_
+              trajectory_origin
             );
 
-          last_relocalization_time_ = matching_result->time;
-
           if(!is_global_localized_){
-            LOG(WARNING)<<"Relocalization Failed";
+            //LOG(WARNING)<<"Relocalization Failed";
             return;
           }
           LOG(INFO)<<"Relocalization Sucess";
-
-          //transform::Rigid3d global_pose_non_aligned = global_pose_*gravity_alignment_mat;
-          local_trajectory_builder_->ResetExtrapolator(matching_result->time,global_pose_*gravity_alignment_mat);
-          //return;
+          global_pose_ = trajectory_origin * matching_result->local_pose;
+          local_trajectory_builder_->SetTrajectoryOrigin(trajectory_origin);
         }
-        //LOG(INFO)<<"GP:"<<global_pose_;
 
         const PoseGraphInterface::SubmapData nearest_submap = 
           pose_graph_ -> SearchNearestSubmap(global_pose_,trajectory_id_);
-        //LOG(INFO)<<"SearchNearestSubmap";
 
         std::unique_ptr<typename LocalTrajectoryBuilder::MatchingResult>
           global_matching_result =
-          local_trajectory_builder_ -> MatchWithOldSubmap(matching_result->insertion_result->constant_data,nearest_submap);
+          local_trajectory_builder_ -> MatchWithOldSubmap(matching_result->insertion_result->constant_data,nearest_submap,matching_result->range_data_in_local);
 
 
         if(global_matching_result == nullptr){
@@ -197,7 +186,6 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
 
   bool is_global_localized_ = false;
   transform::Rigid3d global_pose_;
-  common::Time last_relocalization_time_ = common::Time::min();
 
 };
 

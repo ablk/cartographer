@@ -87,14 +87,18 @@ class LocalTrajectoryBuilder2D {
 
   std::unique_ptr<MatchingResult> MatchWithOldSubmap(
     std::shared_ptr<const TrajectoryNode::Data> node_data,
-    const PoseGraphInterface::SubmapData& nearest_submap);
+    const PoseGraphInterface::SubmapData& nearest_submap,
+    const sensor::RangeData& gravity_aligned_range_data);
 
   bool SetPureLocalization(const bool pure_localization){
     pure_localization_=pure_localization;
   }
 
   //Reset to new trajectory origin
-  void ResetExtrapolator(const common::Time time,const transform::Rigid3d& origin);
+  void SetTrajectoryOrigin(const transform::Rigid3d& trajectory_origin){
+    trajectory_origin_ = trajectory_origin;
+  }
+
 
  private:
   std::unique_ptr<MatchingResult> AddAccumulatedRangeDataAndFilterMoving(
@@ -149,7 +153,7 @@ class LocalTrajectoryBuilder2D {
   RangeDataCollator range_data_collator_;
 
   bool pure_localization_;
-  bool is_global_localized_=false;
+  transform::Rigid3d trajectory_origin_ = transform::Rigid3d::Identity();;
 
 
 };

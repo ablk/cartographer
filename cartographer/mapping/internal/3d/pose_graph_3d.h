@@ -162,8 +162,9 @@ class PoseGraph3D : public PoseGraph {
  //unused functions
   bool SearchAllConstraints(
     std::shared_ptr<const TrajectoryNode::Data> node_data,
+    const std::vector<std::shared_ptr<const Submap3D>>& insertion_submaps,
     const int trajectory_id,
-    transform::Rigid3d& non_gravity_aligned_global_pose){return false;}
+    transform::Rigid3d& trajectory_origin){return false;}
   SubmapData SearchNearestSubmap(const transform::Rigid3d& global_pose,const int trajectory_id){return SubmapData{};}
 
 

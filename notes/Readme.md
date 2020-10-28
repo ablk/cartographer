@@ -56,7 +56,9 @@ TRAJECTORY_BUILDER.pure_localization = false
 * modified localization
 ```lua
 TRAJECTORY_BUILDER.pure_localization = true
+TRAJECTORY_BUILDER_2D.filter_moving = false
 ```
 
 ## TODO
-Fast correlative scan matcher is too slow in modified localization mode, should check origin cartographer and learn how to speed up.
+1.Add thead for localization
+2.Handle case if lost again

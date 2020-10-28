@@ -344,7 +344,7 @@ void ConstraintBuilder2D::RegisterMetrics(metrics::FamilyFactory* factory) {
 
 
 const ConstraintBuilder2D::SubmapScanMatcher*
-ConstraintBuilder2D::NonThreadDispatchScanMatcherConstruction(const SubmapId& submap_id,
+ConstraintBuilder2D::NoLockDispatchScanMatcherConstruction(const SubmapId& submap_id,
                                                      const Grid2D* const grid) {
   CHECK(grid);
   if (submap_scan_matchers_.count(submap_id) != 0) {
@@ -361,8 +361,22 @@ ConstraintBuilder2D::NonThreadDispatchScanMatcherConstruction(const SubmapId& su
   return &submap_scan_matchers_.at(submap_id);
 }
 
-double ConstraintBuilder2D::NonThreadComputeConstraint(
-    const SubmapId& submap_id, const Submap2D* const submap,
+std::shared_ptr<ConstraintBuilder2D::SubmapScanMatcher>
+ConstraintBuilder2D::DispatchScanMatcherConstruction(const Grid2D* const grid) {
+  CHECK(grid);
+
+  auto& scan_matcher_options = options_.fast_correlative_scan_matcher_options();
+  auto submap_scan_matcher = std::make_shared<SubmapScanMatcher>();
+  submap_scan_matcher -> grid = grid;
+  submap_scan_matcher -> fast_correlative_scan_matcher =  
+    absl::make_unique<scan_matching::FastCorrelativeScanMatcher2D>(
+        *(submap_scan_matcher->grid), scan_matcher_options);
+
+  return submap_scan_matcher;
+}
+
+
+double ConstraintBuilder2D::ComputeConstraint(
     const TrajectoryNode::Data* const constant_data,
     const SubmapScanMatcher& submap_scan_matcher,
     transform::Rigid2d& pose_estimate) {
@@ -377,8 +391,6 @@ double ConstraintBuilder2D::NonThreadComputeConstraint(
   {
     return 0;
   }
-
-
   // Use the CSM estimate as both the initial and previous pose. This has the
   // effect that, in the absence of better information, we prefer the original
   // CSM estimate.
@@ -389,17 +401,6 @@ double ConstraintBuilder2D::NonThreadComputeConstraint(
                             *submap_scan_matcher.grid, &pose_estimate,
                             &unused_summary);
   */
-
-
-  if (options_.log_matches()) {
-    std::ostringstream info;
-    info << "Node with "
-         << constant_data->filtered_gravity_aligned_point_cloud.size()
-         << " points on submap " << submap_id << std::fixed;
-    info << " matches";
-    info << " with score " << std::setprecision(1) << 100. * score << "%.";
-    LOG(INFO) << info.str();
-  }
   return score;
 }
 
