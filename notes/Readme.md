@@ -60,5 +60,6 @@ TRAJECTORY_BUILDER_2D.filter_moving = false
 ```
 
 ## TODO
-1.Add thead for localization
-2.Handle case if lost again
+1. move LocalTrajectoryBuilder2D::MatchWithOldSubmap to posegraph2d
+2. Add thead in posegraph2d
+3. Handle case if lost again

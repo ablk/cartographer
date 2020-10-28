@@ -674,13 +674,14 @@ LocalTrajectoryBuilder2D::MatchWithOldSubmap(
   const PoseGraphInterface::SubmapData& nearest_submap,
   const sensor::RangeData& gravity_aligned_range_data) {
 
-
+  //TODO::
+  //move this function into pose graph 2d
 
   // Computes a gravity aligned pose prediction.
   const TrajectoryNode::Data* constant_data = node_data.get();
   
-  const transform::Rigid3d non_gravity_aligned_pose_prediction =
-      trajectory_origin_ * extrapolator_->ExtrapolatePose(constant_data->time);
+  const transform::Rigid3d gravity_aligned_pose_prediction =
+      trajectory_origin_ * node_data->local_pose;
     // robot pose on global frame = 
     //         extrapolator_origin * ExtrapolatePose
     
@@ -692,7 +693,7 @@ LocalTrajectoryBuilder2D::MatchWithOldSubmap(
   //submap pose before(local) and after(global) optimization
     
   const transform::Rigid3d laser_pose_prediction_3d = 
-    submap_global_to_local.inverse()*non_gravity_aligned_pose_prediction * (gravity_alignment_mat).inverse();
+    submap_global_to_local.inverse()*gravity_aligned_pose_prediction;
   // laser_pose_prediction_3d : laser_pose on submap local frame
   
   
@@ -717,7 +718,8 @@ LocalTrajectoryBuilder2D::MatchWithOldSubmap(
   const transform::Rigid3d pose_observation_3d = 
     submap_global_to_local*transform::Embed3D(*pose_observation_2d)*gravity_alignment_mat;
   
-  extrapolator_->AddPose(constant_data->time, trajectory_origin_.inverse() * pose_observation_3d);
+  //extrapolator_->AddPose(constant_data->time, trajectory_origin_.inverse() * pose_observation_3d);
+  trajectory_origin_ = submap_global_to_local*transform::Embed3D(*pose_observation_2d)*(node_data->local_pose).inverse();
 
   sensor::RangeData range_data_in_global;
 
