@@ -645,7 +645,7 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeDataLocalization(
     insertion_submaps = active_submaps_.InsertRangeData(range_data_in_local);
   }
 
-  if(moving_filtered_point_cloud.empty()||active_submaps_.submaps().front() == active_submaps_.submaps().back()){
+  if(moving_filtered_point_cloud.empty() || insertion_submaps.size()==1){
     return nullptr;
     //first filtered range could be empty
   }

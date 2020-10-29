@@ -159,18 +159,26 @@ NodeId PoseGraph2D::AddNode(
 
   if(GetPureLocalization()){
 
+    std::shared_ptr<const Submap2D> submap_data = nullptr;
+    if(!insertion_submaps.empty()){
+      if(insertion_submaps.front()->insertion_finished()){
+        submap_data = insertion_submaps.front();
+      }
+    }
+
+
     if(!is_global_localized_){
-      SearchAllConstraints(
-        constant_data,
-        insertion_submaps,
-        trajectory_id);
+      AddWorkItem([=]() LOCKS_EXCLUDED(mutex_) {
+        return SearchAllConstraints(
+          constant_data,
+          submap_data,
+          trajectory_id);
+      });
       return NodeId{trajectory_id,-1};
       //NodeId(trajectory_id,node_index)
     }
-    const PoseGraphInterface::SubmapData nearest_submap = 
-        SearchNearestSubmap(transform::Embed3D(current_global_pose_),trajectory_id);
-    
-    MatchWithOldSubmap(constant_data,nearest_submap);
+
+    MatchWithOldSubmap(constant_data,trajectory_id);
     return NodeId{trajectory_id,-1};
 
   }
@@ -1352,22 +1360,10 @@ void PoseGraph2D::RegisterMetrics(metrics::FamilyFactory* family_factory) {
   kDeletedSubmapsMetric = submaps->Add({{"state", "deleted"}});
 }
 
-void PoseGraph2D::SearchAllConstraints(
+WorkItem::Result PoseGraph2D::SearchAllConstraints(
     std::shared_ptr<const TrajectoryNode::Data> node_data,
-    const std::vector<std::shared_ptr<const Submap2D>>& insertion_submaps,
+    std::shared_ptr<const Submap2D> submap_data,
     const int trajectory_id){
-  //TODO::
-  //Add Thread support
-
-
-  bool newly_finished_submap = false;
-
-
-  if(!insertion_submaps.empty()){
-    if(insertion_submaps.front()->insertion_finished()){
-      newly_finished_submap = true;
-    }
-  }
 
   if(!newly_finished_submap_sampler){
     newly_finished_submap_sampler = absl::make_unique<common::FixedRatioSampler>(options_.global_sampling_ratio()*2);
@@ -1375,9 +1371,8 @@ void PoseGraph2D::SearchAllConstraints(
 
   int sampled_constraint_num = 0;
 
-  if(newly_finished_submap){
-    const Submap2D* submap = insertion_submaps.front().get();
-    
+  if(submap_data!=nullptr){
+    const Submap2D* submap = submap_data.get();
     const auto scan_matcher =
         constraint_builder_.DispatchScanMatcherConstruction(submap->grid());
 
@@ -1395,12 +1390,12 @@ void PoseGraph2D::SearchAllConstraints(
 
 
           if(score > 0){
+            absl::MutexLock locker(&mutex_);
             LOG(INFO)<<" node "<<node_id<<" matches new submap with score = "<<score;
             trajectory_origin_ = optimization_problem_->node_data().at(node_id).global_pose_2d * pose_estimate.inverse();
             LOG(INFO)<<"Relocalization Sucess";
             is_global_localized_ = true;
-            current_global_pose_ = trajectory_origin_ * transform::Project2D(node_data->local_pose);
-            return;
+            return WorkItem::Result::kDoNotRunOptimization;
     
           }
         }
@@ -1456,18 +1451,18 @@ void PoseGraph2D::SearchAllConstraints(
     
     
     if(score>0){
+      absl::MutexLock locker(&mutex_);
       LOG(INFO)<<"New node matches submap "<<submap_id<<" with score = "<<score;
       trajectory_origin_ = transform::Project2D(submap_data.pose*(submap->local_pose()).inverse())*pose_estimate* transform::Project2D(node_data->local_pose).inverse();
       LOG(INFO)<<"Relocalization Sucess";
       is_global_localized_ = true;
-      current_global_pose_ = trajectory_origin_ * transform::Project2D(node_data->local_pose);
-      return;
+      return WorkItem::Result::kDoNotRunOptimization;
     }
 
   }
   if(sampled_constraint_num>0)
     LOG(WARNING)<<"Relocalization Failed in some samples";
-  return;
+  return WorkItem::Result::kDoNotRunOptimization;
 }
 
 PoseGraphInterface::SubmapData
@@ -1476,7 +1471,6 @@ PoseGraph2D::SearchNearestSubmap(const transform::Rigid3d& global_pose,const int
   SubmapId near_submap_id{-1,-1};
   double near_distance=-1;
 
-  absl::MutexLock locker(&mutex_);
   for (const auto& submap_id_data : data_.submap_data) {
 
     if (submap_id_data.id.trajectory_id == trajectory_id){
@@ -1499,10 +1493,12 @@ PoseGraph2D::SearchNearestSubmap(const transform::Rigid3d& global_pose,const int
 
 void PoseGraph2D::MatchWithOldSubmap(
   std::shared_ptr<const TrajectoryNode::Data> node_data,
-  const PoseGraphInterface::SubmapData& nearest_submap) {
+  const int trajectory_id) {
 
-  //TODO::
-  //move this function into pose graph 2d
+  absl::MutexLock locker(&mutex_);
+  current_global_pose_ = trajectory_origin_ * transform::Project2D(node_data->local_pose);
+  const PoseGraphInterface::SubmapData nearest_submap = 
+        SearchNearestSubmap(transform::Embed3D(current_global_pose_),trajectory_id);
 
   // Computes a gravity aligned pose prediction.
   const TrajectoryNode::Data* constant_data = node_data.get();
@@ -1541,8 +1537,6 @@ void PoseGraph2D::MatchWithOldSubmap(
   current_global_pose_ = transform::Project2D(submap_global_to_local) * (*pose_observation_2d);
   trajectory_origin_ = current_global_pose_ * transform::Project2D((node_data->local_pose).inverse());
 }
-
-
 
 }  // namespace mapping
 }  // namespace cartographer

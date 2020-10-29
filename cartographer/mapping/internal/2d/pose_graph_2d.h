@@ -243,18 +243,16 @@ class PoseGraph2D : public PoseGraph {
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
 
-  void SearchAllConstraints(
+  WorkItem::Result SearchAllConstraints(
     std::shared_ptr<const TrajectoryNode::Data> node_data,
-    const std::vector<std::shared_ptr<const Submap2D>>& insertion_submaps,
+    std::shared_ptr<const Submap2D> submap_data,
     const int trajectory_id) LOCKS_EXCLUDED(mutex_);
 
-  SubmapData SearchNearestSubmap(const transform::Rigid3d& global_pose,const int trajectory_id)LOCKS_EXCLUDED(mutex_);
+  SubmapData SearchNearestSubmap(const transform::Rigid3d& global_pose,const int trajectory_id)EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   void MatchWithOldSubmap(
     std::shared_ptr<const TrajectoryNode::Data> node_data,
-    const PoseGraphInterface::SubmapData& nearest_submap) LOCKS_EXCLUDED(mutex_);
-
-
+    const int trajectory_id) LOCKS_EXCLUDED(mutex_);
 
 
   const proto::PoseGraphOptions options_;

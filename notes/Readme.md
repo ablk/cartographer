@@ -1,3 +1,6 @@
+## Introduction
+Modify some code of cartographer to support pure localization on old map, and mapping in dynamic environment.
+
 ## Build
 1. Get things download
 ```sh
@@ -59,6 +62,5 @@ TRAJECTORY_BUILDER.pure_localization = true
 ```
 
 ## TODO
-2. Add thead in posegraph2d
-3. Handle case if lost again
-4. test half lidar
+1. Handle case if lost again
+2. test half lidar
