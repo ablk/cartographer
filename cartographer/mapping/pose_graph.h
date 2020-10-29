@@ -141,9 +141,15 @@ class PoseGraph : public PoseGraphInterface {
                                         const common::Time time) = 0;
 
 
-  virtual SubmapData SearchNearestSubmap(const transform::Rigid3d& global_pose,const int trajectory_id) = 0;
+  virtual void SetPureLocalization(const bool pure_localiztion){
+    pure_localiztion_ = pure_localiztion;
+  }
 
-
+  virtual bool GetPureLocalization(){
+    return pure_localiztion_;
+  }
+private:
+  bool pure_localiztion_ = false;
 
 };
 

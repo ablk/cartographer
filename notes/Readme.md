@@ -56,10 +56,9 @@ TRAJECTORY_BUILDER.pure_localization = false
 * modified localization
 ```lua
 TRAJECTORY_BUILDER.pure_localization = true
-TRAJECTORY_BUILDER_2D.filter_moving = false
 ```
 
 ## TODO
-1. move LocalTrajectoryBuilder2D::MatchWithOldSubmap to posegraph2d
 2. Add thead in posegraph2d
 3. Handle case if lost again
+4. test half lidar

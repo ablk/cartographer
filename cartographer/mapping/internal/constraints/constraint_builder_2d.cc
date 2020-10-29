@@ -404,6 +404,29 @@ double ConstraintBuilder2D::ComputeConstraint(
   return score;
 }
 
+void ConstraintBuilder2D::CeresScanMatch(
+  const Eigen::Vector2d& target_translation,
+  const transform::Rigid2d& initial_pose_estimate,
+  const sensor::PointCloud& point_cloud,
+  const Grid2D& grid,
+  transform::Rigid2d* const pose_estimate){
+
+
+  ceres::Solver::Summary summary;
+  ceres_scan_matcher_.Match(target_translation, initial_pose_estimate,
+                            point_cloud,
+                            grid, pose_estimate,
+                            &summary);
+  
+  /*
+  sensor::PointCloud unused_point_cloud;
+  ceres_scan_matcher_.MatchAndFilterMoving(target_translation, initial_pose_estimate,
+                               point_cloud, grid,
+                               0.5,
+                               pose_estimate, &summary,
+                               unused_point_cloud);*/
+}
+
 
 
 }  // namespace constraints

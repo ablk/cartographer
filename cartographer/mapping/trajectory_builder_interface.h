@@ -111,18 +111,6 @@ class TrajectoryBuilderInterface {
   virtual void AddLocalSlamResultData(
       std::unique_ptr<mapping::LocalSlamResultData> local_slam_result_data) = 0;
 
-  virtual void SetPureLocalization(const bool pure_localization){
-    pure_localization_ = pure_localization; 
-  }
-
-  virtual bool GetPureLocalization(){
-    return pure_localization_; 
-  }
-
- private:
-  bool pure_localization_ = false;
-
-
 };
 
 proto::SensorId ToProto(const TrajectoryBuilderInterface::SensorId& sensor_id);

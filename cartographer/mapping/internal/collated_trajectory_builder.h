@@ -92,11 +92,6 @@ class CollatedTrajectoryBuilder : public TrajectoryBuilderInterface {
     AddData(std::move(local_slam_result_data));
   }
 
-  void SetPureLocalization(const bool pure_localization) override{
-    //pure_localization_ = pure_localization;
-    wrapped_trajectory_builder_ -> SetPureLocalization(pure_localization);
-  }
-
  private:
   void AddData(std::unique_ptr<sensor::Data> data);
 

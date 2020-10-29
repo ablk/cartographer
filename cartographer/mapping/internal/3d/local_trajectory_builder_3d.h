@@ -76,15 +76,6 @@ class LocalTrajectoryBuilder3D {
 
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 
-//unused functions
-  std::unique_ptr<MatchingResult> MatchWithOldSubmap(
-    std::shared_ptr<const TrajectoryNode::Data> node_data,
-    const PoseGraphInterface::SubmapData& nearest_submap,
-    const sensor::RangeData& gravity_aligned_range_data){return nullptr;}
-  void SetTrajectoryOrigin(const transform::Rigid3d& trajectory_origin){
-   // trajectory_origin_ = trajectory_origin;
-  }
-
  private:
   std::unique_ptr<MatchingResult> AddAccumulatedRangeData(
       common::Time time,

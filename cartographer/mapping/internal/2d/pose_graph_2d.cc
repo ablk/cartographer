@@ -155,6 +155,25 @@ NodeId PoseGraph2D::AddNode(
     std::shared_ptr<const TrajectoryNode::Data> constant_data,
     const int trajectory_id,
     const std::vector<std::shared_ptr<const Submap2D>>& insertion_submaps) {
+  
+
+  if(GetPureLocalization()){
+
+    if(!is_global_localized_){
+      SearchAllConstraints(
+        constant_data,
+        insertion_submaps,
+        trajectory_id);
+      return NodeId{trajectory_id,-1};
+      //NodeId(trajectory_id,node_index)
+    }
+    const PoseGraphInterface::SubmapData nearest_submap = 
+        SearchNearestSubmap(transform::Embed3D(current_global_pose_),trajectory_id);
+    
+    MatchWithOldSubmap(constant_data,nearest_submap);
+    return NodeId{trajectory_id,-1};
+
+  }
   const transform::Rigid3d optimized_pose(
       GetLocalToGlobalTransform(trajectory_id) * constant_data->local_pose);
 
@@ -1333,11 +1352,10 @@ void PoseGraph2D::RegisterMetrics(metrics::FamilyFactory* family_factory) {
   kDeletedSubmapsMetric = submaps->Add({{"state", "deleted"}});
 }
 
-bool PoseGraph2D::SearchAllConstraints(
+void PoseGraph2D::SearchAllConstraints(
     std::shared_ptr<const TrajectoryNode::Data> node_data,
     const std::vector<std::shared_ptr<const Submap2D>>& insertion_submaps,
-    const int trajectory_id,
-    transform::Rigid3d& trajectory_origin){
+    const int trajectory_id){
   //TODO::
   //Add Thread support
 
@@ -1355,6 +1373,8 @@ bool PoseGraph2D::SearchAllConstraints(
     newly_finished_submap_sampler = absl::make_unique<common::FixedRatioSampler>(options_.global_sampling_ratio()*2);
   }
 
+  int sampled_constraint_num = 0;
+
   if(newly_finished_submap){
     const Submap2D* submap = insertion_submaps.front().get();
     
@@ -1365,6 +1385,7 @@ bool PoseGraph2D::SearchAllConstraints(
       const NodeId& node_id = node_id_data.id;
       if(node_id.trajectory_id!=trajectory_id){
         if(newly_finished_submap_sampler->Pulse()){
+          sampled_constraint_num++;
           const TrajectoryNode::Data* constant_data = data_.trajectory_nodes.at(node_id).constant_data.get();
           transform::Rigid2d pose_estimate = transform::Rigid2d::Identity();
           double score = constraint_builder_.ComputeConstraint(
@@ -1375,8 +1396,11 @@ bool PoseGraph2D::SearchAllConstraints(
 
           if(score > 0){
             LOG(INFO)<<" node "<<node_id<<" matches new submap with score = "<<score;
-            trajectory_origin = transform::Embed3D(optimization_problem_->node_data().at(node_id).global_pose_2d * pose_estimate.inverse());
-            return true;
+            trajectory_origin_ = optimization_problem_->node_data().at(node_id).global_pose_2d * pose_estimate.inverse();
+            LOG(INFO)<<"Relocalization Sucess";
+            is_global_localized_ = true;
+            current_global_pose_ = trajectory_origin_ * transform::Project2D(node_data->local_pose);
+            return;
     
           }
         }
@@ -1394,6 +1418,7 @@ bool PoseGraph2D::SearchAllConstraints(
         && submap_id_data.id.trajectory_id != trajectory_id ){
 
         if(global_localization_samplers_[submap_id_data.id.trajectory_id]->Pulse()){
+          sampled_constraint_num++;
           finished_submap_ids.emplace_back(submap_id_data.id);
         }
       
@@ -1432,13 +1457,17 @@ bool PoseGraph2D::SearchAllConstraints(
     
     if(score>0){
       LOG(INFO)<<"New node matches submap "<<submap_id<<" with score = "<<score;
-      pose_estimate = transform::Project2D(submap_data.pose*(submap->local_pose()).inverse())*pose_estimate;
-      trajectory_origin = transform::Embed3D(pose_estimate) * (node_data->local_pose).inverse();
-      return true;
+      trajectory_origin_ = transform::Project2D(submap_data.pose*(submap->local_pose()).inverse())*pose_estimate* transform::Project2D(node_data->local_pose).inverse();
+      LOG(INFO)<<"Relocalization Sucess";
+      is_global_localized_ = true;
+      current_global_pose_ = trajectory_origin_ * transform::Project2D(node_data->local_pose);
+      return;
     }
 
   }
-  return false;
+  if(sampled_constraint_num>0)
+    LOG(WARNING)<<"Relocalization Failed in some samples";
+  return;
 }
 
 PoseGraphInterface::SubmapData
@@ -1466,6 +1495,53 @@ PoseGraph2D::SearchNearestSubmap(const transform::Rigid3d& global_pose,const int
   return GetSubmapDataUnderLock(near_submap_id);
 
 }
+
+
+void PoseGraph2D::MatchWithOldSubmap(
+  std::shared_ptr<const TrajectoryNode::Data> node_data,
+  const PoseGraphInterface::SubmapData& nearest_submap) {
+
+  //TODO::
+  //move this function into pose graph 2d
+
+  // Computes a gravity aligned pose prediction.
+  const TrajectoryNode::Data* constant_data = node_data.get();
+  
+  const transform::Rigid3d gravity_aligned_pose_prediction =
+      transform::Embed3D(trajectory_origin_) * node_data->local_pose;
+    // robot pose on global frame = 
+    //         extrapolator_origin * ExtrapolatePose
+
+  std::shared_ptr<const Submap2D> matching_submap = std::dynamic_pointer_cast<const Submap2D>(nearest_submap.submap);
+    
+  const transform::Rigid3d submap_global_to_local = nearest_submap.pose * (matching_submap->local_pose()).inverse();
+  //submap pose before(local) and after(global) optimization
+    
+  const transform::Rigid3d laser_pose_prediction_3d = 
+    submap_global_to_local.inverse()*gravity_aligned_pose_prediction;
+  // laser_pose_prediction_3d : laser_pose on submap local frame
+  
+  const transform::Rigid2d pose_prediction = transform::Project2D(laser_pose_prediction_3d);
+
+
+  auto pose_observation_2d = absl::make_unique<transform::Rigid2d>();
+  constraint_builder_.CeresScanMatch(pose_prediction.translation(), pose_prediction,
+                            constant_data->filtered_gravity_aligned_point_cloud ,
+                            *matching_submap->grid(), pose_observation_2d.get());
+  
+  if(pose_observation_2d==nullptr){
+    LOG(WARNING)<<"fail global localization";
+    //TODO::
+    //handle case if is_global_localized_ then track lost again
+    is_global_localized_ = false;
+    return;
+  }
+  
+  //*pose_observation_2d : laser pose in submap local
+  current_global_pose_ = transform::Project2D(submap_global_to_local) * (*pose_observation_2d);
+  trajectory_origin_ = current_global_pose_ * transform::Project2D((node_data->local_pose).inverse());
+}
+
 
 
 }  // namespace mapping

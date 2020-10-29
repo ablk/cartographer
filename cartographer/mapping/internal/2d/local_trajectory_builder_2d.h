@@ -85,18 +85,8 @@ class LocalTrajectoryBuilder2D {
       const absl::optional<common::Duration>& sensor_duration,
       const transform::Rigid3d& range_data_pose);
 
-  std::unique_ptr<MatchingResult> MatchWithOldSubmap(
-    std::shared_ptr<const TrajectoryNode::Data> node_data,
-    const PoseGraphInterface::SubmapData& nearest_submap,
-    const sensor::RangeData& gravity_aligned_range_data);
-
   bool SetPureLocalization(const bool pure_localization){
     pure_localization_=pure_localization;
-  }
-
-  //Reset to new trajectory origin
-  void SetTrajectoryOrigin(const transform::Rigid3d& trajectory_origin){
-    trajectory_origin_ = trajectory_origin;
   }
 
 
@@ -153,9 +143,6 @@ class LocalTrajectoryBuilder2D {
   RangeDataCollator range_data_collator_;
 
   bool pure_localization_;
-  transform::Rigid3d trajectory_origin_ = transform::Rigid3d::Identity();;
-
-
 };
 
 }  // namespace mapping

@@ -659,81 +659,13 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeDataLocalization(
           {},  // 'high_resolution_point_cloud' is only used in 3D.
           {},  // 'low_resolution_point_cloud' is only used in 3D.
           {},  // 'rotational_scan_matcher_histogram' is only used in 3D.
-          pose_estimate*gravity_alignment.inverse()}),//used for compute trajectory origin
+          transform::Embed3D(*pose_estimate_2d)}),//used for compute trajectory origin
           std::move(insertion_submaps)});
   return absl::make_unique<MatchingResult>(
-    MatchingResult{time, pose_estimate, std::move(gravity_aligned_range_data),//for visualization
+    MatchingResult{time, transform::Rigid3d::Identity(), std::move(gravity_aligned_range_data),//for visualization
                    std::move(insertion_result)});
 
 }
-
-
-std::unique_ptr<LocalTrajectoryBuilder2D::MatchingResult> 
-LocalTrajectoryBuilder2D::MatchWithOldSubmap(
-  std::shared_ptr<const TrajectoryNode::Data> node_data,
-  const PoseGraphInterface::SubmapData& nearest_submap,
-  const sensor::RangeData& gravity_aligned_range_data) {
-
-  //TODO::
-  //move this function into pose graph 2d
-
-  // Computes a gravity aligned pose prediction.
-  const TrajectoryNode::Data* constant_data = node_data.get();
-  
-  const transform::Rigid3d gravity_aligned_pose_prediction =
-      trajectory_origin_ * node_data->local_pose;
-    // robot pose on global frame = 
-    //         extrapolator_origin * ExtrapolatePose
-    
-  const transform::Rigid3d gravity_alignment_mat = transform::Rigid3d::Rotation(constant_data->gravity_alignment);
-    
-  std::shared_ptr<const Submap2D> matching_submap = std::dynamic_pointer_cast<const Submap2D>(nearest_submap.submap);
-    
-  const transform::Rigid3d submap_global_to_local = nearest_submap.pose * (matching_submap->local_pose()).inverse();
-  //submap pose before(local) and after(global) optimization
-    
-  const transform::Rigid3d laser_pose_prediction_3d = 
-    submap_global_to_local.inverse()*gravity_aligned_pose_prediction;
-  // laser_pose_prediction_3d : laser_pose on submap local frame
-  
-  
-  const transform::Rigid2d pose_prediction = transform::Project2D(laser_pose_prediction_3d);
-
-
-  auto pose_observation_2d = absl::make_unique<transform::Rigid2d>();
-  ceres::Solver::Summary summary;
-  ceres_scan_matcher_.Match(pose_prediction.translation(), pose_prediction,
-                            constant_data->filtered_gravity_aligned_point_cloud ,
-                            *matching_submap->grid(), pose_observation_2d.get(),
-                            &summary);
-  
-  if(pose_observation_2d==nullptr){
-      LOG(WARNING) << "Scan matching failed."<< summary.final_cost;
-        return nullptr;
-  }
-  
-  //*pose_observation_2d : laser pose in submap local
-  //pose_observation_3d : robot pose in global
-
-  const transform::Rigid3d pose_observation_3d = 
-    submap_global_to_local*transform::Embed3D(*pose_observation_2d)*gravity_alignment_mat;
-  
-  //extrapolator_->AddPose(constant_data->time, trajectory_origin_.inverse() * pose_observation_3d);
-  trajectory_origin_ = submap_global_to_local*transform::Embed3D(*pose_observation_2d)*(node_data->local_pose).inverse();
-
-  sensor::RangeData range_data_in_global;
-
-  //point cloud for visualization
-  range_data_in_global = TransformRangeData(gravity_aligned_range_data,(submap_global_to_local*transform::Embed3D(*pose_observation_2d)).cast<float>());
-
-  return absl::make_unique<MatchingResult>(
-        MatchingResult{constant_data->time, pose_observation_3d, 
-          std::move(range_data_in_global),
-          nullptr
-          });
-
-}
-
 
 }  // namespace mapping
 }  // namespace cartographer

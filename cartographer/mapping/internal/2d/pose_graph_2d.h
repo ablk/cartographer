@@ -159,12 +159,9 @@ class PoseGraph2D : public PoseGraph {
 
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 
-  bool SearchAllConstraints(
-    std::shared_ptr<const TrajectoryNode::Data> node_data,
-    const std::vector<std::shared_ptr<const Submap2D>>& insertion_submaps,
-    const int trajectory_id,
-    transform::Rigid3d& trajectory_origin) LOCKS_EXCLUDED(mutex_);
-  SubmapData SearchNearestSubmap(const transform::Rigid3d& global_pose,const int trajectory_id)override LOCKS_EXCLUDED(mutex_);
+  transform::Rigid3d GetCurrentGlobalPose(){
+    return transform::Embed3D(current_global_pose_);
+  }
 
  private:
   MapById<SubmapId, PoseGraphInterface::SubmapData> GetSubmapDataUnderLock()
@@ -245,6 +242,21 @@ class PoseGraph2D : public PoseGraph {
   void UpdateTrajectoryConnectivity(const Constraint& constraint)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
+
+  void SearchAllConstraints(
+    std::shared_ptr<const TrajectoryNode::Data> node_data,
+    const std::vector<std::shared_ptr<const Submap2D>>& insertion_submaps,
+    const int trajectory_id) LOCKS_EXCLUDED(mutex_);
+
+  SubmapData SearchNearestSubmap(const transform::Rigid3d& global_pose,const int trajectory_id)LOCKS_EXCLUDED(mutex_);
+
+  void MatchWithOldSubmap(
+    std::shared_ptr<const TrajectoryNode::Data> node_data,
+    const PoseGraphInterface::SubmapData& nearest_submap) LOCKS_EXCLUDED(mutex_);
+
+
+
+
   const proto::PoseGraphOptions options_;
   GlobalSlamOptimizationCallback global_slam_optimization_callback_;
   mutable absl::Mutex mutex_;
@@ -277,6 +289,9 @@ class PoseGraph2D : public PoseGraph {
 
 
   std::unique_ptr<common::FixedRatioSampler> newly_finished_submap_sampler GUARDED_BY(mutex_);
+  transform::Rigid2d trajectory_origin_ GUARDED_BY(mutex_) = transform::Rigid2d::Identity();
+  bool is_global_localized_ GUARDED_BY(mutex_) = false;
+  transform::Rigid2d current_global_pose_ GUARDED_BY(mutex_) = transform::Rigid2d::Identity(); 
 
   // Allows querying and manipulating the pose graph by the 'trimmers_'. The
   // 'mutex_' of the pose graph is held while this class is used.

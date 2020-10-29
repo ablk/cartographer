@@ -126,6 +126,13 @@ class ConstraintBuilder2D {
     const SubmapScanMatcher& submap_scan_matcher,
     transform::Rigid2d& pose_estimate);
 
+void CeresScanMatch(
+  const Eigen::Vector2d& target_translation,
+  const transform::Rigid2d& initial_pose_estimate,
+  const sensor::PointCloud& point_cloud,
+  const Grid2D& grid,
+  transform::Rigid2d* const pose_estimate);
+
 
  private:
 
